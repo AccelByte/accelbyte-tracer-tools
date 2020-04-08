@@ -1,4 +1,4 @@
-module github.com/AccelByte/logger-go
+module github.com/AccelByte/tracer-go
 
 go 1.13
 
