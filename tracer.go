@@ -9,12 +9,10 @@ import (
 
 	"github.com/emicklei/go-restful"
 	"github.com/opentracing/opentracing-go"
-
-	"github.com/AccelByte/go-restful-plugins/v3/pkg/logger/event"
 	"github.com/opentracing/opentracing-go/ext"
 	"github.com/opentracing/opentracing-go/log"
 	"github.com/sirupsen/logrus"
-	jaegerclientgo "github.com/uber/jaeger-client-go"
+	"github.com/uber/jaeger-client-go"
 	"github.com/uber/jaeger-client-go/transport"
 	"github.com/uber/jaeger-client-go/zipkin"
 )
@@ -23,6 +21,7 @@ type contextKeyType string
 
 const (
 	SpanContextKey = contextKeyType("span")
+	TraceIDKey     = "X-Ab-TraceID"
 )
 
 var forwardHeaders = [...]string{
@@ -42,47 +41,47 @@ func InitGlobalTracer(
 	realm string,
 ) io.Closer {
 	zipkinPropagator := zipkin.NewZipkinB3HTTPHeaderPropagator()
-	injector := jaegerclientgo.TracerOptions.Injector(opentracing.HTTPHeaders, zipkinPropagator)
-	extractor := jaegerclientgo.TracerOptions.Extractor(opentracing.HTTPHeaders, zipkinPropagator)
+	injector := jaeger.TracerOptions.Injector(opentracing.HTTPHeaders, zipkinPropagator)
+	extractor := jaeger.TracerOptions.Extractor(opentracing.HTTPHeaders, zipkinPropagator)
 
 	// Zipkin shares span ID between client and server spans; it must be enabled via the following option.
-	zipkinSharedRPCSpan := jaegerclientgo.TracerOptions.ZipkinSharedRPCSpan(true)
+	zipkinSharedRPCSpan := jaeger.TracerOptions.ZipkinSharedRPCSpan(true)
 
-	var reporter jaegerclientgo.Reporter
+	var reporter jaeger.Reporter
 
 	if jaegerAgentHost == "" && jaegerCollectorEndpoint == "" {
-		reporter = jaegerclientgo.NewNullReporter() // for running locally
+		reporter = jaeger.NewNullReporter() // for running locally
 
 		logrus.Info("Jaeger client configured to be silent")
 	} else {
-		var sender jaegerclientgo.Transport
+		var sender jaeger.Transport
 		if jaegerCollectorEndpoint != "" {
 			sender = transport.NewHTTPTransport(jaegerCollectorEndpoint)
 			logrus.Infof("Jaeger client configured to use the collector: %s", jaegerCollectorEndpoint)
 		} else {
 			var err error
-			sender, err = jaegerclientgo.NewUDPTransport(jaegerAgentHost, 0)
+			sender, err = jaeger.NewUDPTransport(jaegerAgentHost, 0)
 			if err != nil {
 				logrus.Errorf("Jaeger transport initialization error: %s", err.Error())
 			}
 			logrus.Infof("Jaeger client configured to use the agent: %s", jaegerAgentHost)
 		}
 
-		reporter = jaegerclientgo.NewRemoteReporter(
+		reporter = jaeger.NewRemoteReporter(
 			sender,
-			jaegerclientgo.ReporterOptions.BufferFlushInterval(1*time.Second),
-			jaegerclientgo.ReporterOptions.Logger(jaegerclientgo.StdLogger),
+			jaeger.ReporterOptions.BufferFlushInterval(1*time.Second),
+			jaeger.ReporterOptions.Logger(jaeger.StdLogger),
 		)
 	}
 
-	newTracer, closer := jaegerclientgo.NewTracer(
+	newTracer, closer := jaeger.NewTracer(
 		serviceName+"."+realm,
-		jaegerclientgo.NewConstSampler(true),
+		jaeger.NewConstSampler(true),
 		reporter,
 		injector,
 		extractor,
 		zipkinSharedRPCSpan,
-		jaegerclientgo.TracerOptions.PoolSpans(false),
+		jaeger.TracerOptions.PoolSpans(false),
 	)
 	// Set the singleton opentracing.Tracer with the Jaeger tracer.
 	opentracing.SetGlobalTracer(newTracer)
@@ -126,8 +125,8 @@ func InjectTrace(ctx context.Context, incomingReq *restful.Request,
 		logrus.Debug("outgoing header : ", header)
 	}
 
-	if abTraceID := incomingReq.Request.Header.Get(event.TraceIDKey); abTraceID != "" {
-		outgoingReq.Header.Set(event.TraceIDKey, abTraceID)
+	if abTraceID := incomingReq.Request.Header.Get(TraceIDKey); abTraceID != "" {
+		outgoingReq.Header.Set(TraceIDKey, abTraceID)
 	}
 
 	return outgoingReq, span, newCtx
@@ -168,8 +167,8 @@ func StartSpan(req *restful.Request, operationName string) (opentracing.Span, co
 	ext.HTTPMethod.Set(span, req.Request.Method)
 	ext.HTTPUrl.Set(span, req.Request.Host+req.Request.RequestURI)
 
-	if abTraceID := req.Request.Header.Get(event.TraceIDKey); abTraceID != "" {
-		AddTag(span, event.TraceIDKey, abTraceID)
+	if abTraceID := req.Request.Header.Get(TraceIDKey); abTraceID != "" {
+		AddTag(span, TraceIDKey, abTraceID)
 	}
 
 	return span, opentracing.ContextWithSpan(req.Request.Context(), span)
@@ -205,8 +204,8 @@ func StartSpanIfParentSpanExist(req *restful.Request, operationName string) (ope
 	ext.HTTPMethod.Set(span, req.Request.Method)
 	ext.HTTPUrl.Set(span, req.Request.Host+req.Request.RequestURI)
 
-	if abTraceID := req.Request.Header.Get(event.TraceIDKey); abTraceID != "" {
-		AddTag(span, event.TraceIDKey, abTraceID)
+	if abTraceID := req.Request.Header.Get(TraceIDKey); abTraceID != "" {
+		AddTag(span, TraceIDKey, abTraceID)
 	}
 
 	return span, opentracing.ContextWithSpan(req.Request.Context(), span)
@@ -217,7 +216,7 @@ func ChildSpanFromRemoteSpan(
 	name string,
 	spanContextStr string,
 ) (opentracing.Span, context.Context) {
-	spanContext, err := jaegerclientgo.ContextFromString(spanContextStr)
+	spanContext, err := jaeger.ContextFromString(spanContextStr)
 	if err == nil {
 		return opentracing.StartSpan(
 			name,
@@ -339,7 +338,7 @@ func GetSpanFromRestfulContext(ctx context.Context) opentracing.Span {
 
 func GetSpanContextString(span opentracing.Span) string {
 	if span != nil {
-		if spanContext, ok := span.Context().(jaegerclientgo.SpanContext); ok {
+		if spanContext, ok := span.Context().(jaeger.SpanContext); ok {
 			return spanContext.String()
 		}
 	}

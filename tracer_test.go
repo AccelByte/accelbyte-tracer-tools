@@ -8,7 +8,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	jaegerclientgo "github.com/uber/jaeger-client-go"
+	"github.com/uber/jaeger-client-go"
 )
 
 func TestGetSpanFromRestfulContextWithoutSpan(t *testing.T) {
@@ -21,10 +21,10 @@ func TestGetSpanFromRestfulContextWithoutSpan(t *testing.T) {
 	require.NotNil(t, span)
 
 	require.NotNil(t, span.Context())
-	require.IsType(t, jaegerclientgo.SpanContext{}, span.Context())
-	require.NotNil(t, span.Context().(jaegerclientgo.SpanContext))
-	require.NotEmpty(t, span.Context().(jaegerclientgo.SpanContext).TraceID())
-	assert.NotEmpty(t, span.Context().(jaegerclientgo.SpanContext).TraceID().String())
+	require.IsType(t, jaeger.SpanContext{}, span.Context())
+	require.NotNil(t, span.Context().(jaeger.SpanContext))
+	require.NotEmpty(t, span.Context().(jaeger.SpanContext).TraceID())
+	assert.NotEmpty(t, span.Context().(jaeger.SpanContext).TraceID().String())
 }
 
 func TestGetSpanFromRestfulContextWithSpan(t *testing.T) {
@@ -40,13 +40,13 @@ func TestGetSpanFromRestfulContextWithSpan(t *testing.T) {
 	require.NotNil(t, span)
 
 	require.NotNil(t, span.Context())
-	require.IsType(t, jaegerclientgo.SpanContext{}, span.Context())
-	require.NotNil(t, span.Context().(jaegerclientgo.SpanContext))
-	require.NotEmpty(t, span.Context().(jaegerclientgo.SpanContext).TraceID())
+	require.IsType(t, jaeger.SpanContext{}, span.Context())
+	require.NotNil(t, span.Context().(jaeger.SpanContext))
+	require.NotEmpty(t, span.Context().(jaeger.SpanContext).TraceID())
 
 	assert.Equal(t,
-		expectedSpan.Context().(jaegerclientgo.SpanContext).TraceID().String(),
-		span.Context().(jaegerclientgo.SpanContext).TraceID().String(),
+		expectedSpan.Context().(jaeger.SpanContext).TraceID().String(),
+		span.Context().(jaeger.SpanContext).TraceID().String(),
 	)
 }
 
@@ -58,18 +58,18 @@ func TestChildSpanFromRemoteSpan(t *testing.T) {
 
 	expectedSpan, _ := opentracing.StartSpanFromContext(context.Background(), "test")
 
-	spanContextStr := expectedSpan.Context().(jaegerclientgo.SpanContext).String()
+	spanContextStr := expectedSpan.Context().(jaeger.SpanContext).String()
 
 	span, _ := ChildSpanFromRemoteSpan(context.Background(), "test", spanContextStr)
 
 	assert.Equal(t,
-		expectedSpan.Context().(jaegerclientgo.SpanContext).TraceID().String(),
-		span.Context().(jaegerclientgo.SpanContext).TraceID().String(),
+		expectedSpan.Context().(jaeger.SpanContext).TraceID().String(),
+		span.Context().(jaeger.SpanContext).TraceID().String(),
 	)
 
 	assert.Equal(t,
-		expectedSpan.Context().(jaegerclientgo.SpanContext).SpanID().String(),
-		span.Context().(jaegerclientgo.SpanContext).ParentID().String(),
+		expectedSpan.Context().(jaeger.SpanContext).SpanID().String(),
+		span.Context().(jaeger.SpanContext).ParentID().String(),
 	)
 }
 
@@ -82,11 +82,11 @@ func TestChildSpanFromRemoteSpan_EmptySpanContextString(t *testing.T) {
 	scope, _ := ChildSpanFromRemoteSpan(context.Background(), "test", "")
 
 	assert.NotEmpty(t,
-		scope.Context().(jaegerclientgo.SpanContext).TraceID().String(),
+		scope.Context().(jaeger.SpanContext).TraceID().String(),
 	)
 
 	assert.NotEmpty(t,
-		scope.Context().(jaegerclientgo.SpanContext).ParentID().String(),
+		scope.Context().(jaeger.SpanContext).ParentID().String(),
 	)
 }
 
@@ -100,10 +100,10 @@ func TestGetSpanContextString_NotEmptySpanContext(t *testing.T) {
 	require.NotNil(t, span)
 
 	require.NotNil(t, span.Context())
-	require.IsType(t, jaegerclientgo.SpanContext{}, span.Context())
-	require.NotNil(t, span.Context().(jaegerclientgo.SpanContext))
-	require.NotEmpty(t, span.Context().(jaegerclientgo.SpanContext).TraceID())
-	assert.NotEmpty(t, span.Context().(jaegerclientgo.SpanContext).TraceID().String())
+	require.IsType(t, jaeger.SpanContext{}, span.Context())
+	require.NotNil(t, span.Context().(jaeger.SpanContext))
+	require.NotEmpty(t, span.Context().(jaeger.SpanContext).TraceID())
+	assert.NotEmpty(t, span.Context().(jaeger.SpanContext).TraceID().String())
 
 	spanContextString := GetSpanContextString(span)
 	assert.NotEmpty(t, spanContextString)
